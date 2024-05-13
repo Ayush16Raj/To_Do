@@ -2,6 +2,8 @@ package com.example.todolist.screen
 
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,9 +37,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.todolist.R
 import com.example.todolist.data.Todo
-import com.example.todolist.data.dummyTodo
 import com.example.todolist.viewmodel.TodoViewModel
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -45,6 +47,9 @@ import java.util.Locale
 @Composable
 fun MainScreen(vm:TodoViewModel) {
 val todoList by vm.todoList.observeAsState()
+
+    // MutableState to hold the selected TODO item
+    val selectedTodo = remember { mutableStateOf<Todo?>(null) }
 
     val showDialog = remember {
         mutableStateOf(false)
@@ -68,7 +73,10 @@ val todoList by vm.todoList.observeAsState()
                 itemsIndexed(it){ index: Int, item: Todo ->
                     TodoItem(item = item, onDelete = {
                         vm.deleteTodo(item.id)
-                    })
+                    },
+                // Pass the selected TODO item to onEdit
+                onEdit = { todo -> selectedTodo.value = todo })
+
                 }
             })
         }?: Text(text = "No items yet")
@@ -85,25 +93,49 @@ val todoList by vm.todoList.observeAsState()
                 onAddTodo = onAddTodo)
 
     }
+
+    // Show the edit dialog when a TODO item is selected
+    selectedTodo.value?.let { todo ->
+        EditTodoDialog(
+            todo = todo,
+            onDismiss = { selectedTodo.value = null }, // Reset selectedTodo when dialog dismissed
+            onUpdate = { updatedTodo ->
+                vm.updateTodo(updatedTodo)
+                selectedTodo.value = null // Reset selectedTodo after updating
+            }
+        )
+    }
 }
 
+
+
+
 @Composable
-fun TodoItem(item:Todo,onDelete :()->Unit){
-Row(modifier = Modifier
+fun TodoItem(item:Todo,onDelete :()->Unit, onEdit: (Todo) -> Unit){
+    val backgroundColor = if (isSystemInDarkTheme()) {
+        Color.DarkGray // Use dark gray for dark mode
+    } else {
+        Color.LightGray // Use light gray for light mode
+    }
+
+    Row(modifier = Modifier
     .fillMaxWidth()
     .padding(8.dp)
     .clip(RoundedCornerShape(16.dp))
-    .background(MaterialTheme.colorScheme.primary)
-    .padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    .background(backgroundColor)
+    .padding(10.dp).clickable {
+        onEdit(item)
+    }, verticalAlignment = Alignment.CenterVertically) {
     Column(modifier = Modifier.weight(1f)) {
         Text(text = SimpleDateFormat("HH:mm:aa,dd/mm", Locale.ENGLISH).format(item.date), fontSize = 13.sp
         )
-        Text(text = item.title.toString(), fontSize = 17.sp)
+        Text(text = item.title, fontSize = 17.sp)
     }
     IconButton(onClick =
         onDelete) {
         Icon(painter = painterResource(id = R.drawable.baseline_delete_24), contentDescription = "Delete")
     }
+
 }
 }
 @Composable
@@ -114,24 +146,24 @@ fun FAB(
     onAddTodo: (String) -> Unit
 ){
 
-    val addTodoNumber = remember{
+    val addTodo = remember{
         mutableStateOf("")
     }
     if (showDialog){
         AlertDialog(onDismissRequest = { onDismiss.invoke()
-            addTodoNumber.value=""},
+            addTodo.value=""},
             confirmButton = {
-                Button(onClick = { onAddTodo(addTodoNumber.value)
-                    addTodoNumber.value = ""
+                Button(onClick = { onAddTodo(addTodo.value)
+                    addTodo.value = ""
                 }) {
                     Text(text = "Add Todo")
                 }
             },
             title = { Text(text = "Enter Todo")},
             text = {
-                OutlinedTextField(value = addTodoNumber.value,
+                OutlinedTextField(value = addTodo.value,
                     onValueChange = {
-                        addTodoNumber.value = it
+                        addTodo.value = it
 
                     }
                 )
@@ -155,4 +187,26 @@ fun FAB(
 
 
 
+}
+@Composable
+fun EditTodoDialog(todo: Todo, onDismiss: () -> Unit, onUpdate: (Todo) -> Unit) {
+    val (title, setTitle) = remember { mutableStateOf(todo.title) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = {
+                onUpdate(todo.copy(title = title))
+            }) {
+                Text(text = "Update")
+            }
+        },
+        title = { Text(text = "Edit Todo") },
+        text = {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { setTitle(it) }
+            )
+        }
+    )
 }
